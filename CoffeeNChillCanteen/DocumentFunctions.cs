@@ -5,8 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Linq;
 
 namespace CoffeeNChillCanteen;
 
@@ -25,7 +24,10 @@ public class DocumentFunctions
 
     [Function("UploadStaffDocument")]
     public async Task<IActionResult> UploadStaffDocument(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "documents/upload")]
+        [HttpTrigger(
+            AuthorizationLevel.Anonymous,
+            "post",
+            Route = "documents/upload")]
         HttpRequest req)
     {
         _logger.LogInformation(
@@ -140,6 +142,53 @@ public class DocumentFunctions
             return new ObjectResult(new
             {
                 error = "The staff document could not be uploaded."
+            })
+            {
+                StatusCode = StatusCodes.Status500InternalServerError
+            };
+        }
+    }
+
+    [Function("ListStaffDocuments")]
+    public async Task<IActionResult> ListStaffDocuments(
+        [HttpTrigger(
+            AuthorizationLevel.Anonymous,
+            "get",
+            Route = "documents")]
+        HttpRequest req)
+    {
+        _logger.LogInformation(
+            "Staff document listing request received.");
+
+        try
+        {
+            var blobs = await _blobStorageService.ListAsync();
+
+            var documents = blobs
+                .Select(blob => new
+                {
+                    fileName = blob.Name,
+                    size = blob.Properties.ContentLength ?? 0,
+                    lastModified = blob.Properties.LastModified
+                })
+                .OrderBy(document => document.fileName)
+                .ToList();
+
+            _logger.LogInformation(
+                "Retrieved {DocumentCount} staff documents.",
+                documents.Count);
+
+            return new OkObjectResult(documents);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "An error occurred while listing staff documents.");
+
+            return new ObjectResult(new
+            {
+                error = "Staff documents could not be retrieved."
             })
             {
                 StatusCode = StatusCodes.Status500InternalServerError
