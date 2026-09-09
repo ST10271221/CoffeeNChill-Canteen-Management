@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "CoffeeNChillCanteen": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7270",
+      "launchBrowser": false
+    }
+  }
+}
