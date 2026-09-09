@@ -195,4 +195,91 @@ public class DocumentFunctions
             };
         }
     }
+
+    [Function("DownloadStaffDocument")]
+    public async Task<IActionResult> DownloadStaffDocument(
+    [HttpTrigger(
+        AuthorizationLevel.Anonymous,
+        "get",
+        Route = "documents/download/{fileName}")]
+    HttpRequest req,
+    string fileName)
+    {
+        _logger.LogInformation(
+            "Staff document download request received for: {FileName}",
+            fileName);
+
+        if (string.IsNullOrWhiteSpace(fileName))
+        {
+            _logger.LogWarning(
+                "Download rejected because the file name was empty.");
+
+            return new BadRequestObjectResult(new
+            {
+                error = "A file name is required."
+            });
+        }
+
+        var safeFileName = Path.GetFileName(fileName);
+
+        if (!string.Equals(
+                safeFileName,
+                fileName,
+                StringComparison.Ordinal))
+        {
+            _logger.LogWarning(
+                "Download rejected because an unsafe file name was supplied: {FileName}",
+                fileName);
+
+            return new BadRequestObjectResult(new
+            {
+                error = "Invalid file name."
+            });
+        }
+
+        try
+        {
+            var documentStream = await _blobStorageService.DownloadAsync(
+                safeFileName);
+
+            if (documentStream is null)
+            {
+                _logger.LogWarning(
+                    "Staff document not found: {FileName}",
+                    safeFileName);
+
+                return new NotFoundObjectResult(new
+                {
+                    error = "The requested staff document was not found.",
+                    fileName = safeFileName
+                });
+            }
+
+            _logger.LogInformation(
+                "Staff document downloaded successfully: {FileName}",
+                safeFileName);
+
+            return new FileStreamResult(
+                documentStream,
+                "application/pdf")
+            {
+                FileDownloadName = safeFileName
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "An error occurred while downloading staff document: {FileName}",
+                safeFileName);
+
+            return new ObjectResult(new
+            {
+                error = "The staff document could not be downloaded."
+            })
+            {
+                StatusCode = StatusCodes.Status500InternalServerError
+            };
+        }
+    }
 }
