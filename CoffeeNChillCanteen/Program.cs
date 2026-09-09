@@ -1,20 +1,21 @@
-using Azure.Monitor.OpenTelemetry.Exporter;
-using Microsoft.Azure.Functions.Worker;
+using CoffeeNChillCanteen.Repositories;
 using Microsoft.Azure.Functions.Worker.Builder;
-using Microsoft.Azure.Functions.Worker.OpenTelemetry;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using OpenTelemetry;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
 builder.ConfigureFunctionsWebApplication();
 
-if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING")))
+var connectionString = builder.Configuration["AzureWebJobsStorage"];
+
+if (string.IsNullOrWhiteSpace(connectionString))
 {
-    builder.Services.AddOpenTelemetry()
-        .UseFunctionsWorkerDefaults()
-        .UseAzureMonitorExporter();
+    throw new InvalidOperationException(
+        "AzureWebJobsStorage is not configured.");
 }
+
+builder.Services.AddSingleton<IMenuRepository>(
+    new TableMenuRepository(connectionString));
 
 builder.Build().Run();
