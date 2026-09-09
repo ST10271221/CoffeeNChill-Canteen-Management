@@ -2,6 +2,7 @@ using CoffeeNChillCanteen.Repositories;
 using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using CoffeeNChillCanteen.Services;
 
 var builder = FunctionsApplication.CreateBuilder(args);
 
@@ -17,5 +18,8 @@ if (string.IsNullOrWhiteSpace(connectionString))
 
 builder.Services.AddSingleton<IMenuRepository>(
     new TableMenuRepository(connectionString));
+
+builder.Services.AddSingleton<IBlobStorageService>(
+    new BlobStorageService(connectionString));
 
 builder.Build().Run();
