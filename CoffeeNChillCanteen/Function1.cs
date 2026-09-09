@@ -1,14 +1,12 @@
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Logging;
+using System.ComponentModel.DataAnnotations;
 using System.Net;
 using System.Text.Json;
 using CoffeeNChillCanteen.DTOs;
 using CoffeeNChillCanteen.Models;
 using CoffeeNChillCanteen.Repositories;
+using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
-
+using Microsoft.Extensions.Logging;
 
 namespace CoffeeNChillCanteen;
 
@@ -50,38 +48,34 @@ public class MenuFunctions
                     "Request body is required.");
             }
 
-            var validationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
+            var validationResults = ValidateRequest(request);
 
-            var validationContext =
-                new System.ComponentModel.DataAnnotations.ValidationContext(request);
-
-            if (!System.ComponentModel.DataAnnotations.Validator.TryValidateObject(
-                    request,
-                    validationContext,
-                    validationResults,
-                    validateAllProperties: true))
+            if (validationResults.Count > 0)
             {
                 return await CreateValidationErrorResponse(
                     req,
                     validationResults);
             }
 
+            var category = request.Category.Trim();
+            var sku = request.Sku.Trim().ToUpperInvariant();
+
             var existingItem = await _menuRepository.GetByIdAsync(
-                request.Category,
-                request.Sku);
+                category,
+                sku);
 
             if (existingItem is not null)
             {
                 return await CreateErrorResponse(
                     req,
                     HttpStatusCode.Conflict,
-                    $"Menu item with SKU '{request.Sku}' already exists in category '{request.Category}'.");
+                    $"Menu item with SKU '{sku}' already exists in category '{category}'.");
             }
 
             var menuItem = new MenuItem
             {
-                Category = request.Category.Trim(),
-                Sku = request.Sku.Trim().ToUpperInvariant(),
+                Category = category,
+                Sku = sku,
                 Name = request.Name.Trim(),
                 Description = request.Description.Trim(),
                 Price = request.Price,
@@ -131,7 +125,29 @@ public class MenuFunctions
     {
         try
         {
-            var menuItems = await _menuRepository.GetAllAsync();
+            var category = GetQueryParameter(
+                req.Url.Query,
+                "category");
+
+            IReadOnlyList<MenuItem> menuItems;
+
+            if (category is null)
+            {
+                menuItems = await _menuRepository.GetAllAsync();
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(category))
+                {
+                    return await CreateErrorResponse(
+                        req,
+                        HttpStatusCode.BadRequest,
+                        "Category cannot be empty.");
+                }
+
+                menuItems = await _menuRepository.GetByCategoryAsync(
+                    category.Trim());
+            }
 
             var response = req.CreateResponse(HttpStatusCode.OK);
 
@@ -152,6 +168,178 @@ public class MenuFunctions
         }
     }
 
+    [Function("UpdateMenuItem")]
+    public async Task<HttpResponseData> UpdateMenuItem(
+        [HttpTrigger(
+            AuthorizationLevel.Function,
+            "put",
+            Route = "menu/{category}/{sku}")]
+        HttpRequestData req,
+        string category,
+        string sku)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(category) ||
+                string.IsNullOrWhiteSpace(sku))
+            {
+                return await CreateErrorResponse(
+                    req,
+                    HttpStatusCode.BadRequest,
+                    "Category and SKU are required.");
+            }
+
+            category = category.Trim();
+            sku = sku.Trim().ToUpperInvariant();
+
+            var request = await JsonSerializer.DeserializeAsync<UpdateMenuItemRequest>(
+                req.Body,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+            if (request is null)
+            {
+                return await CreateErrorResponse(
+                    req,
+                    HttpStatusCode.BadRequest,
+                    "Request body is required.");
+            }
+
+            var validationResults = ValidateRequest(request);
+
+            if (validationResults.Count > 0)
+            {
+                return await CreateValidationErrorResponse(
+                    req,
+                    validationResults);
+            }
+
+            var existingItem = await _menuRepository.GetByIdAsync(
+                category,
+                sku);
+
+            if (existingItem is null)
+            {
+                return await CreateErrorResponse(
+                    req,
+                    HttpStatusCode.NotFound,
+                    $"Menu item with SKU '{sku}' was not found in category '{category}'.");
+            }
+
+            if (request.Price.HasValue)
+            {
+                existingItem.Price = request.Price.Value;
+            }
+
+            if (request.IsAvailable.HasValue)
+            {
+                existingItem.IsAvailable = request.IsAvailable.Value;
+            }
+
+            var updatedItem = await _menuRepository.UpdateAsync(
+                existingItem);
+
+            if (updatedItem is null)
+            {
+                return await CreateErrorResponse(
+                    req,
+                    HttpStatusCode.NotFound,
+                    $"Menu item with SKU '{sku}' was not found in category '{category}'.");
+            }
+
+            _logger.LogInformation(
+                "Updated menu item {Sku} in category {Category}.",
+                updatedItem.Sku,
+                updatedItem.Category);
+
+            var response = req.CreateResponse(HttpStatusCode.OK);
+
+            await response.WriteAsJsonAsync(updatedItem);
+
+            return response;
+        }
+        catch (JsonException)
+        {
+            return await CreateErrorResponse(
+                req,
+                HttpStatusCode.BadRequest,
+                "Invalid JSON request body.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Unexpected error while updating menu item {Sku} in category {Category}.",
+                sku,
+                category);
+
+            return await CreateErrorResponse(
+                req,
+                HttpStatusCode.InternalServerError,
+                "An unexpected error occurred while updating the menu item.");
+        }
+    }
+
+    private static List<ValidationResult> ValidateRequest(
+    object request)
+    {
+        var validationResults = new List<ValidationResult>();
+
+        var validationContext = new ValidationContext(request);
+
+        Validator.TryValidateObject(
+            request,
+            validationContext,
+            validationResults,
+            validateAllProperties: true);
+
+        return validationResults;
+    }
+
+    private static string? GetQueryParameter(
+        string query,
+        string parameterName)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return null;
+        }
+
+        var queryWithoutPrefix = query.TrimStart('?');
+
+        foreach (var parameter in queryWithoutPrefix.Split(
+            '&',
+            StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = parameter.Split(
+                '=',
+                2,
+                StringSplitOptions.None);
+
+            var name = Uri.UnescapeDataString(
+                parts[0].Replace("+", " "));
+
+            if (!name.Equals(
+                    parameterName,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (parts.Length == 1)
+            {
+                return string.Empty;
+            }
+
+            return Uri.UnescapeDataString(
+                parts[1].Replace("+", " "));
+        }
+
+        return null;
+    }
+
     private static async Task<HttpResponseData> CreateErrorResponse(
         HttpRequestData req,
         HttpStatusCode statusCode,
@@ -169,7 +357,7 @@ public class MenuFunctions
 
     private static async Task<HttpResponseData> CreateValidationErrorResponse(
         HttpRequestData req,
-        List<System.ComponentModel.DataAnnotations.ValidationResult> validationResults)
+        List<ValidationResult> validationResults)
     {
         var response = req.CreateResponse(HttpStatusCode.BadRequest);
 
@@ -178,11 +366,20 @@ public class MenuFunctions
             error = "Validation failed.",
             details = validationResults
                 .SelectMany(result =>
-                    result.MemberNames.Select(memberName => new
-                    {
-                        field = memberName,
-                        message = result.ErrorMessage
-                    }))
+                    result.MemberNames.Any()
+                        ? result.MemberNames.Select(memberName => new
+                        {
+                            field = memberName,
+                            message = result.ErrorMessage
+                        })
+                        : new[]
+                        {
+                            new
+                            {
+                                field = string.Empty,
+                                message = result.ErrorMessage
+                            }
+                        })
                 .ToList()
         });
 
