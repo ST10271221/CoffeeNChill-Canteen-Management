@@ -282,6 +282,74 @@ public class MenuFunctions
         }
     }
 
+    [Function("DeleteMenuItem")]
+    public async Task<HttpResponseData> DeleteMenuItem(
+    [HttpTrigger(AuthorizationLevel.Function,"delete",Route = "menu/{category}/{sku}")]
+    HttpRequestData req,
+    string category,
+    string sku)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(category) ||
+                string.IsNullOrWhiteSpace(sku))
+            {
+                return await CreateErrorResponse(
+                    req,
+                    HttpStatusCode.BadRequest,
+                    "Category and SKU are required.");
+            }
+
+            category = category.Trim();
+            sku = sku.Trim().ToUpperInvariant();
+
+            var existingItem = await _menuRepository.GetByIdAsync(
+                category,
+                sku);
+
+            if (existingItem is null)
+            {
+                return await CreateErrorResponse(
+                    req,
+                    HttpStatusCode.NotFound,
+                    $"Menu item with SKU '{sku}' was not found in category '{category}'.");
+            }
+
+            var deleted = await _menuRepository.DeleteAsync(
+                category,
+                sku);
+
+            if (!deleted)
+            {
+                return await CreateErrorResponse(
+                    req,
+                    HttpStatusCode.NotFound,
+                    $"Menu item with SKU '{sku}' was not found in category '{category}'.");
+            }
+
+            _logger.LogInformation(
+                "Deleted menu item {Sku} from category {Category}.",
+                sku,
+                category);
+
+            return req.CreateResponse(
+                HttpStatusCode.NoContent);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Unexpected error while deleting menu item {Sku} in category {Category}.",
+                sku,
+                category);
+
+            return await CreateErrorResponse(
+                req,
+                HttpStatusCode.InternalServerError,
+                "An unexpected error occurred while deleting the menu item.");
+        }
+    }
+
     private static List<ValidationResult> ValidateRequest(
     object request)
     {

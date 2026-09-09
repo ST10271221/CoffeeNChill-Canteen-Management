@@ -20,4 +20,8 @@ public interface IMenuRepository
 
     Task<MenuItem?> UpdateAsync(
         MenuItem menuItem);
+
+    Task<bool> DeleteAsync(
+        string category,
+        string sku);
 }
