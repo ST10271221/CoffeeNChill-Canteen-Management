@@ -6,11 +6,14 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
+using Azure;
 
 namespace CoffeeNChillCanteen;
 
 public class DocumentFunctions
 {
+    private const long MaxDocumentSizeBytes = 10 * 1024 * 1024;
+    private const int MaxFileNameLength = 100;
     private readonly IBlobStorageService _blobStorageService;
     private readonly ILogger<DocumentFunctions> _logger;
 
@@ -33,6 +36,23 @@ public class DocumentFunctions
         _logger.LogInformation(
             "Staff document upload request received.");
 
+        if (req.ContentLength.HasValue &&
+        req.ContentLength.Value > MaxDocumentSizeBytes)
+        {
+            _logger.LogWarning(
+                "Upload rejected because the request exceeded the maximum size of {MaxSizeBytes} bytes.",
+                MaxDocumentSizeBytes);
+
+            return new ObjectResult(new
+            {
+                error = "The uploaded document is too large.",
+                maximumSizeBytes = MaxDocumentSizeBytes
+            })
+            {
+                StatusCode = StatusCodes.Status413PayloadTooLarge
+            };
+        }
+
         if (!req.HasFormContentType)
         {
             _logger.LogWarning(
@@ -43,6 +63,8 @@ public class DocumentFunctions
                 error = "Request must use multipart/form-data."
             });
         }
+
+        string safeFileName = string.Empty;
 
         try
         {
@@ -89,13 +111,29 @@ public class DocumentFunctions
                 });
             }
 
-            var safeFileName = Path.GetFileName(file.FileName);
+            safeFileName = Path.GetFileName(file.FileName).Trim();
 
             if (string.IsNullOrWhiteSpace(safeFileName))
             {
+                _logger.LogWarning(
+                    "Upload rejected because the file name was invalid.");
+
                 return new BadRequestObjectResult(new
                 {
                     error = "Invalid file name."
+                });
+            }
+
+            if (safeFileName.Length > MaxFileNameLength)
+            {
+                _logger.LogWarning(
+                    "Upload rejected because the file name exceeded {MaxLength} characters.",
+                    MaxFileNameLength);
+
+                return new BadRequestObjectResult(new
+                {
+                    error = "The file name is too long.",
+                    maximumFileNameLength = MaxFileNameLength
                 });
             }
 
@@ -117,6 +155,83 @@ public class DocumentFunctions
                 });
             }
 
+            if (file.Data is null)
+            {
+                _logger.LogWarning(
+                    "Upload rejected because no file data was available.");
+
+                return new BadRequestObjectResult(new
+                {
+                    error = "The uploaded document contains no data."
+                });
+            }
+
+            if (file.Data.CanSeek &&
+                file.Data.Length == 0)
+            {
+                _logger.LogWarning(
+                    "Upload rejected because the document was empty.");
+
+                return new BadRequestObjectResult(new
+                {
+                    error = "The uploaded document is empty."
+                });
+            }
+
+            if (file.Data.CanSeek &&
+                file.Data.Length > MaxDocumentSizeBytes)
+            {
+                _logger.LogWarning(
+                    "Upload rejected because the document exceeded the maximum size.");
+
+                return new ObjectResult(new
+                {
+                    error = "The uploaded document is too large.",
+                    maximumSizeBytes = MaxDocumentSizeBytes
+                })
+                {
+                    StatusCode = StatusCodes.Status413PayloadTooLarge
+                };
+            }
+
+            if (file.Data.CanSeek)
+            {
+                var originalPosition = file.Data.Position;
+
+                try
+                {
+                    var header = new byte[5];
+
+                    file.Data.Position = 0;
+
+                    var bytesRead = await file.Data.ReadAsync(
+                        header,
+                        0,
+                        header.Length);
+
+                    if (bytesRead < 5 ||
+                        header[0] != 0x25 ||
+                        header[1] != 0x50 ||
+                        header[2] != 0x44 ||
+                        header[3] != 0x46 ||
+                        header[4] != 0x2D)
+                    {
+                        _logger.LogWarning(
+                            "Upload rejected because the file does not have a valid PDF signature: {FileName}",
+                            safeFileName);
+
+                        return new BadRequestObjectResult(new
+                        {
+                            error = "The uploaded file is not a valid PDF document."
+                        });
+                    }
+                }
+                finally
+                {
+                    file.Data.Position = originalPosition;
+                }
+            }
+
             await _blobStorageService.UploadAsync(
                 file.Data,
                 safeFileName,
@@ -133,11 +248,25 @@ public class DocumentFunctions
                 contentType = "application/pdf"
             });
         }
+        catch (RequestFailedException ex)
+        when (ex.Status == StatusCodes.Status409Conflict)
+        {
+            _logger.LogWarning(
+                "Upload rejected because the document already exists: {FileName}",
+                safeFileName);
+
+            return new ConflictObjectResult(new
+            {
+                error = "A staff document with this file name already exists.",
+                fileName = safeFileName
+            });
+        }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
-                "An error occurred while uploading a staff document.");
+                "An error occurred while uploading a staff document: {FileName}",
+                safeFileName);
 
             return new ObjectResult(new
             {
@@ -270,7 +399,7 @@ public class DocumentFunctions
         {
             _logger.LogError(
                 ex,
-                "An error occurred while downloading staff document: {FileName}",
+                "An error occurred while downloading a staff document: {FileName}",
                 safeFileName);
 
             return new ObjectResult(new

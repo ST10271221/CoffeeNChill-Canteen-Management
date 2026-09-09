@@ -1,4 +1,5 @@
-﻿using Azure.Storage.Blobs;
+﻿using Azure;
+using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using System;
 using System.Collections.Generic;
@@ -35,6 +36,10 @@ public class BlobStorageService : IBlobStorageService
             HttpHeaders = new BlobHttpHeaders
             {
                 ContentType = contentType
+            },
+            Conditions = new BlobRequestConditions
+            {
+                IfNoneMatch = ETag.All
             }
         };
 
