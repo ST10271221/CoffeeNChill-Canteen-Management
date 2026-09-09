@@ -168,6 +168,56 @@ public class MenuFunctions
         }
     }
 
+    [Function("GetMenuItemsByCategory")]
+    public async Task<HttpResponseData> GetMenuItemsByCategory(
+        [HttpTrigger(
+            AuthorizationLevel.Function,
+            "get",
+            Route = "menu/category/{category}")]
+        HttpRequestData req,
+        string category)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(category))
+            {
+                return await CreateErrorResponse(
+                    req,
+                    HttpStatusCode.BadRequest,
+                    "Category is required.");
+            }
+
+            category = category.Trim();
+
+            var menuItems = await _menuRepository.GetByCategoryAsync(
+                category);
+
+            _logger.LogInformation(
+                "Retrieved {Count} menu items from category {Category}.",
+                menuItems.Count,
+                category);
+
+            var response = req.CreateResponse(
+                HttpStatusCode.OK);
+
+            await response.WriteAsJsonAsync(menuItems);
+
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Unexpected error while retrieving menu items from category {Category}.",
+                category);
+
+            return await CreateErrorResponse(
+                req,
+                HttpStatusCode.InternalServerError,
+                "An unexpected error occurred while retrieving menu items by category.");
+        }
+    }
+
     [Function("UpdateMenuItem")]
     public async Task<HttpResponseData> UpdateMenuItem(
         [HttpTrigger(
