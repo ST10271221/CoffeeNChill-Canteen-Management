@@ -214,6 +214,29 @@
       "item": [
         {
           "name": "Upload Staff Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Document upload succeeds\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Upload response confirms the file name\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.fileName).to.eql(pm.environment.get(\"documentFileName\"));",
+                  "});",
+                  "",
+                  "pm.test(\"Upload response confirms PDF content type\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.contentType).to.eql(\"application/pdf\");",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "body": {
@@ -240,6 +263,32 @@
         },
         {
           "name": "List Staff Documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Document list request succeeds\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Document list returns an array\", function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.be.an(\"array\");",
+                  "});",
+                  "",
+                  "pm.test(\"Uploaded document appears in the list\", function () {",
+                  "    const json = pm.response.json();",
+                  "    const fileName = pm.environment.get(\"documentFileName\");",
+                  "    pm.expect(",
+                  "        json.some(document => document.fileName === fileName)",
+                  "    ).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": {
@@ -255,6 +304,27 @@
         },
         {
           "name": "Download Staff Document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Document download succeeds\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Downloaded document is a PDF\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/pdf\");",
+                  "});",
+                  "",
+                  "pm.test(\"Downloaded response contains data\", function () {",
+                  "    pm.expect(pm.response.body).to.not.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "url": {
