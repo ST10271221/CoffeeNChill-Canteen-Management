@@ -3,6 +3,7 @@ setlocal
 
 set CONTAINER_NAME=coffeenchill-azurite
 set IMAGE_NAME=mcr.microsoft.com/azure-storage/azurite
+set NETWORK_NAME=coffeenchill-network
 
 echo.
 echo ==========================================
@@ -15,8 +16,22 @@ docker image inspect %IMAGE_NAME% >nul 2>&1
 if errorlevel 1 (
     echo Pulling the official Azurite image...
     docker pull %IMAGE_NAME%
+
     if errorlevel 1 (
         echo ERROR: Failed to pull the Azurite image.
+        exit /b 1
+    )
+)
+
+docker network inspect %NETWORK_NAME% >nul 2>&1
+
+if errorlevel 1 (
+    echo Creating Docker network %NETWORK_NAME%...
+
+    docker network create %NETWORK_NAME%
+
+    if errorlevel 1 (
+        echo ERROR: Failed to create Docker network.
         exit /b 1
     )
 )
@@ -34,6 +49,20 @@ if not errorlevel 1 (
     )
 
     echo Azurite container started successfully.
+
+    docker network inspect %NETWORK_NAME% --format "{{json .Containers}}" | findstr /i "%CONTAINER_NAME%" >nul 2>&1
+
+    if errorlevel 1 (
+        echo Connecting Azurite container to %NETWORK_NAME%...
+
+        docker network connect %NETWORK_NAME% %CONTAINER_NAME%
+
+        if errorlevel 1 (
+            echo ERROR: Failed to connect Azurite to the Docker network.
+            exit /b 1
+        )
+    )
+
     goto :verify
 )
 
@@ -41,6 +70,7 @@ echo Creating a new Azurite container...
 
 docker run -d ^
     --name %CONTAINER_NAME% ^
+    --network %NETWORK_NAME% ^
     -p 10000:10000 ^
     -p 10001:10001 ^
     -p 10002:10002 ^
