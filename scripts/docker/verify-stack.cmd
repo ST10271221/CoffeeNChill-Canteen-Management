@@ -44,17 +44,17 @@ if errorlevel 1 (
 echo PASS: Docker network exists.
 
 echo.
-echo [4/5] Checking Functions HTTP endpoint...
-for /f "delims=" %%S in ('curl -s -o NUL -w "%%{http_code}" http://localhost:7071/api/documents') do set FUNCTIONS_STATUS=%%S
+echo [4/5] Checking integrated storage health...
+for /f "delims=" %%S in ('curl -s -o NUL -w "%%{http_code}" http://localhost:7071/api/health') do set HEALTH_STATUS=%%S
 
-echo HTTP status: %FUNCTIONS_STATUS%
+echo HTTP status: %HEALTH_STATUS%
 
-if not "%FUNCTIONS_STATUS%"=="200" (
-    echo ERROR: Functions HTTP endpoint did not return 200.
+if not "%HEALTH_STATUS%"=="200" (
+    echo ERROR: Integrated storage health check did not return 200.
     exit /b 1
 )
 
-echo PASS: Functions HTTP endpoint returned 200.
+echo PASS: Table Storage and Blob Storage are connected.
 
 echo.
 echo [5/5] Checking Azurite Blob service...
