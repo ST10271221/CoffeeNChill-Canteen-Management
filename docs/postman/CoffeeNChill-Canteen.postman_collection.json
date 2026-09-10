@@ -17,12 +17,29 @@
       "item": [
         {
           "name": "Create Menu Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Menu create endpoint requires Function authentication\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{functionKey}}"
               }
             ],
             "body": {
@@ -42,8 +59,27 @@
         },
         {
           "name": "Get All Menu Items",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Menu endpoint requires Function authentication\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
+            "header": [
+              {
+                "key": "x-functions-key",
+                "value": "{{functionKey}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/menu",
               "host": [
@@ -57,8 +93,27 @@
         },
         {
           "name": "Get Menu Items By Category",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Menu category endpoint requires Function authentication\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "GET",
+            "header": [
+              {
+                "key": "x-functions-key",
+                "value": "{{functionKey}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/menu/category/{{menuCategory}}",
               "host": [
@@ -74,12 +129,29 @@
         },
         {
           "name": "Update Menu Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Menu update endpoint requires Function authentication\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "PUT",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{functionKey}}"
               }
             ],
             "body": {
@@ -101,8 +173,27 @@
         },
         {
           "name": "Delete Menu Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Menu delete endpoint requires Function authentication\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "DELETE",
+            "header": [
+              {
+                "key": "x-functions-key",
+                "value": "{{functionKey}}"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/menu/{{menuCategory}}/{{menuSku}}",
               "host": [
